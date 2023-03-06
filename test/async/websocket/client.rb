@@ -44,7 +44,34 @@ ClientExamples = Sus::Shared("a websocket client") do
 				Async::WebSocket::Client.connect(client_endpoint) {}
 			end.to raise_exception(Async::WebSocket::ProtocolError, message: be =~ /Failed to negotiate connection/)
 		end
-	end
+  end
+
+  with "server close condition" do
+    let(:close_condition) { Async::Condition.new }
+
+    let(:app) do
+      Protocol::HTTP::Middleware.for do |request|
+        Async::WebSocket::Adapters::HTTP.open(request) do |connection|
+          while connection.read; end
+        rescue Errno::EPIPE => e
+          connection.close
+
+          close_condition.signal e.cause.code
+        end
+      end
+    end
+
+    let(:timeout) { nil }
+
+    it 'closes with custom error' do
+      expectation = Async { expect(close_condition.wait).to be == 1001 }
+
+      connection = Async::WebSocket::Client.connect(client_endpoint)
+      connection.close 1001
+
+      expectation.wait
+    end
+  end
 end
 
 describe Async::WebSocket::Client do
