@@ -25,7 +25,7 @@ ClientExamples = Sus::Shared("a websocket client") do
 	let(:timeout) { nil }
 
 
-	with "http1 is ok, http2 test stacks as before" do
+	with "http1 is ok, http2 test are stuck as before" do
 		let(:close_condition) { Async::Condition.new }
 
 		let(:app) do
