@@ -20,16 +20,73 @@ ClientExamples = Sus::Shared("a websocket client") do
 		end
 	end
 	
-	it "can connect to a websocket server and close underlying client" do
-		Async do |task|
+	with '#send_close' do
+		it "can read incoming messages and then close" do
 			connection = Async::WebSocket::Client.connect(client_endpoint)
-			connection.send_text("Hello World!")
-			message = connection.read
-			expect(message.to_str).to be == "Hello World!"
+			3.times do
+				connection.send_text("Hello World!")
+			end
 			
-			connection.close
-			expect(task.children).to be(:empty?)
-		end.wait
+			# This informs the server we are done echoing messages:
+			connection.send_close
+			
+			# Collect all the echoed messages:
+			messages = []
+			while message = connection.read
+				messages << message
+			end
+			
+			expect(messages.size).to be == 3
+			expect(connection).to be(:closed?)
+		ensure
+			connection&.close
+		end
+	end
+	
+	with '#close' do
+		it "can connect to a websocket server and close underlying client" do
+			Async do |task|
+				connection = Async::WebSocket::Client.connect(client_endpoint)
+				connection.send_text("Hello World!")
+				message = connection.read
+				expect(message.to_str).to be == "Hello World!"
+				
+				connection.close
+				expect(task.children).to be(:empty?)
+			end.wait
+		end
+		
+		it "can connect to a websocket server and close underlying client with an error code" do
+			Async do |task|
+				connection = Async::WebSocket::Client.connect(client_endpoint)
+				connection.send_text("Hello World!")
+				message = connection.read
+				expect(message.to_str).to be == "Hello World!"
+				
+				connection.close(Protocol::WebSocket::Error::GOING_AWAY, "Bye!")
+				expect(task.children).to be(:empty?)
+			end.wait
+		end
+	end
+	
+	with "#close(1001)" do
+		let(:app) do
+			Protocol::HTTP::Middleware.for do |request|
+				Async::WebSocket::Adapters::HTTP.open(request) do |connection|
+					connection.send_text("Hello World!")
+					connection.close(1001)
+				end
+			end
+		end
+
+		it 'closes with custom error' do
+			connection = Async::WebSocket::Client.connect(client_endpoint)
+			message = connection.read
+			
+			expect do
+				connection.read
+			end.to raise_exception(Protocol::WebSocket::Error).and(have_attributes(code: be == 1001))
+		end
 	end
 	
 	with 'missing support for websockets' do

@@ -41,8 +41,8 @@ module Async
 					super(connection)
 				end
 				
-				def close(*arguments)
-					super
+				def close(...)
+					super(...)
 					
 					if @client
 						@client.close
